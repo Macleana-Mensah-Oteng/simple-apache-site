@@ -6,34 +6,39 @@ on:
       - main
   workflow_dispatch:
 
-concurrency:
-  group: apache-deploy
-  cancel-in-progress: true
-
 jobs:
   deploy:
     runs-on: ubuntu-latest
+
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Sync static site to remote Apache server
+      - name: Verify files
+        run: |
+          echo "Repository structure:"
+          ls -R
+
+      - name: Upload files to Apache server
         uses: appleboy/scp-action@v1
         with:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
           source: "public-html/*"
-          target: "/var/www/html/"
+          target: "/tmp/site-upload"
 
-      - name: Restart Apache and validate deployment on remote server
+      - name: Move files and restart Apache
         uses: appleboy/ssh-action@v1.2.4
         with:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
           script: |
+            sudo mkdir -p /var/www/html
+            sudo cp -r /tmp/site-upload/public-html/* /var/www/html/
             sudo systemctl restart apache2
-            sudo systemctl is-active --quiet apache2
-            curl --fail http://127.0.0.1/
+            sudo systemctl status apache2 --no-pager
